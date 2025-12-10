@@ -1,0 +1,26 @@
+{
+  "name": "sportsnet-poc2",
+  "version": "1.0.0",
+  "description": "富山県公共施設予約システムの空き状況監視ツール",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && node dist/index.js",
+    "dev": "ts-node src/index.ts"
+  },
+  "keywords": [
+    "playwright",
+    "scraper",
+    "toyama"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "playwright": "^1.49.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.7.2"
+  }
+}

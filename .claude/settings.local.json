@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_take_screenshot",
+      "mcp__playwright__browser_click",
+      "Bash(npm install)",
+      "Bash(npx playwright install:*)",
+      "Bash(npm run build:*)",
+      "Bash(node dist/index.js:*)"
+    ]
+  }
+}
