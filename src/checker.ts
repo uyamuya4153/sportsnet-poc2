@@ -117,28 +117,40 @@ export async function checkTarget(
       console.log(`[DEBUG]   部屋名: "${room.roomName}" (時間枠数: ${room.timeSlots.length})`);
     }
 
-    // 対象の部屋を検索
-    const roomData = availabilityData.find(
+    // 対象の部屋を検索（同名の部屋が複数ある場合はすべて取得）
+    const matchingRooms = availabilityData.filter(
       room => room.roomName.includes(target.room) || target.room.includes(room.roomName)
     );
 
-    if (!roomData) {
+    if (matchingRooms.length === 0) {
       console.log(`[WARN] 部屋が見つかりません: ${target.room}`);
       return result;
     }
 
-    // デバッグ: マッチした部屋の時間枠情報を表示
-    console.log(`[DEBUG] マッチした部屋: "${roomData.roomName}"`);
-    for (const slot of roomData.timeSlots) {
-      console.log(`[DEBUG]   ${slot.time}: ${slot.status}`);
+    console.log(`[DEBUG] マッチした部屋数: ${matchingRooms.length}`);
+
+    // すべてのマッチした部屋から空き時間帯を収集
+    const allAvailableSlots = new Set<string>();
+
+    for (let i = 0; i < matchingRooms.length; i++) {
+      const roomData = matchingRooms[i];
+      console.log(`[DEBUG] 部屋 ${i + 1}: "${roomData.roomName}"`);
+
+      for (const slot of roomData.timeSlots) {
+        console.log(`[DEBUG]   ${slot.time}: ${slot.status}`);
+      }
+
+      // この部屋の空き時間帯をチェック
+      const availableSlots = findAvailableSlots(roomData, target.timeSlots);
+      for (const slot of availableSlots) {
+        allAvailableSlots.add(slot);
+      }
     }
 
-    // 指定時間帯の空きをチェック
-    const availableSlots = findAvailableSlots(roomData, target.timeSlots);
-    result.availableSlots = availableSlots;
+    result.availableSlots = Array.from(allAvailableSlots);
 
     // 空きがあればスクリーンショットを保存
-    if (availableSlots.length > 0) {
+    if (result.availableSlots.length > 0) {
       // screenshotDirが存在しない場合は作成
       if (!fs.existsSync(screenshotDir)) {
         fs.mkdirSync(screenshotDir, { recursive: true });
@@ -152,7 +164,7 @@ export async function checkTarget(
       console.log(`  施設: ${target.facility}`);
       console.log(`  部屋: ${target.room}`);
       console.log(`  日付: ${target.date}`);
-      console.log(`  空き時間帯: ${availableSlots.join(', ')}`);
+      console.log(`  空き時間帯: ${result.availableSlots.join(', ')}`);
       console.log(`  スクリーンショット: ${screenshotPath}`);
     } else {
       console.log(`[INFO] 空きなし: ${target.facility} / ${target.room} / ${target.date}`);
