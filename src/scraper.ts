@@ -1,15 +1,32 @@
-import { chromium, Browser, Page } from 'playwright';
+import { chromium, Browser, Page } from 'playwright-core';
 import { RoomAvailability, TimeSlotStatus, AvailabilityStatus } from './types';
 
 const BASE_URL = 'https://k4.p-kashikan.jp/toyama-pref/';
 
 /**
  * Playwrightブラウザを起動
+ * Lambda環境では @sparticuz/chromium を使用
  */
 export async function launchBrowser(): Promise<Browser> {
-  return await chromium.launch({
-    headless: true,
-  });
+  const isLambda = !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+
+  if (isLambda) {
+    // Lambda環境: @sparticuz/chromium を使用
+    const chromiumLambda = await import('@sparticuz/chromium');
+    const executablePath = await chromiumLambda.default.executablePath();
+
+    return await chromium.launch({
+      args: chromiumLambda.default.args,
+      executablePath,
+      headless: true,
+    });
+  } else {
+    // ローカル環境: 通常のPlaywrightを使用
+    const playwrightFull = await import('playwright');
+    return await playwrightFull.chromium.launch({
+      headless: true,
+    });
+  }
 }
 
 /**

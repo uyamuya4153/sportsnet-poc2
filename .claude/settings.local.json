@@ -10,7 +10,8 @@
       "Bash(node dist/index.js:*)",
       "mcp__playwright__browser_close",
       "Bash(npm run start)",
-      "mcp__playwright__browser_snapshot"
+      "mcp__playwright__browser_snapshot",
+      "Bash(npm run build:lambda:*)"
     ]
   }
 }

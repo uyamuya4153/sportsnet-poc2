@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 富山県公共施設予約システム空き監視Lambda
+
+Globals:
+  Function:
+    Timeout: 300
+    MemorySize: 1024
+
+Resources:
+  # DynamoDBテーブル
+  TargetsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: facility-availability-targets
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+
+  # Lambda関数
+  AvailabilityCheckerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: facility-availability-checker
+      Handler: lambda.handler
+      Runtime: nodejs22.x
+      Architectures:
+        - x86_64
+      MemorySize: 1024
+      Timeout: 300
+      CodeUri: dist/
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref TargetsTable
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref TargetsTable
+      Events:
+        ScheduleEvent:
+          Type: Schedule
+          Properties:
+            Schedule: rate(1 hour)
+            Description: 1時間ごとに空き状況をチェック
+            Enabled: true
+
+Outputs:
+  FunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt AvailabilityCheckerFunction.Arn
+  FunctionName:
+    Description: Lambda Function Name
+    Value: !Ref AvailabilityCheckerFunction
+  TableName:
+    Description: DynamoDB Table Name
+    Value: !Ref TargetsTable

@@ -80,11 +80,14 @@ function generateScreenshotFilename(
 
 /**
  * 単一のターゲットをチェック
+ * @param page Playwrightのページ
+ * @param target 監視対象
+ * @param screenshotDir スクリーンショット保存先（省略時はスクリーンショットを保存しない）
  */
 export async function checkTarget(
   page: Page,
   target: Target,
-  screenshotDir: string
+  screenshotDir?: string
 ): Promise<CheckResult> {
   const result: CheckResult = {
     facility: target.facility,
@@ -103,9 +106,11 @@ export async function checkTarget(
     console.log(`[INFO] 日付を移動中: ${target.date}`);
     await navigateToDate(page, target.date);
 
-    // デバッグ用にスクリーンショットを保存
-    await takeScreenshot(page, './screenshots/debug_page.png');
-    console.log(`[DEBUG] デバッグ用スクリーンショット保存: ./screenshots/debug_page.png`);
+    // デバッグ用にスクリーンショットを保存（screenshotDirが指定されている場合のみ）
+    if (screenshotDir) {
+      await takeScreenshot(page, './screenshots/debug_page.png');
+      console.log(`[DEBUG] デバッグ用スクリーンショット保存: ./screenshots/debug_page.png`);
+    }
 
     // 空き状況を解析
     console.log(`[INFO] 空き状況を解析中...`);
@@ -149,23 +154,25 @@ export async function checkTarget(
 
     result.availableSlots = Array.from(allAvailableSlots);
 
-    // 空きがあればスクリーンショットを保存
+    // 結果をログ出力
     if (result.availableSlots.length > 0) {
-      // screenshotDirが存在しない場合は作成
-      if (!fs.existsSync(screenshotDir)) {
-        fs.mkdirSync(screenshotDir, { recursive: true });
-      }
-
-      const screenshotPath = generateScreenshotFilename(target, screenshotDir);
-      await takeScreenshot(page, screenshotPath);
-      result.screenshotPath = screenshotPath;
-
       console.log(`[SUCCESS] 空きを発見!`);
       console.log(`  施設: ${target.facility}`);
       console.log(`  部屋: ${target.room}`);
       console.log(`  日付: ${target.date}`);
       console.log(`  空き時間帯: ${result.availableSlots.join(', ')}`);
-      console.log(`  スクリーンショット: ${screenshotPath}`);
+
+      // 空きがあり、screenshotDirが指定されている場合のみスクリーンショットを保存
+      if (screenshotDir) {
+        if (!fs.existsSync(screenshotDir)) {
+          fs.mkdirSync(screenshotDir, { recursive: true });
+        }
+
+        const screenshotPath = generateScreenshotFilename(target, screenshotDir);
+        await takeScreenshot(page, screenshotPath);
+        result.screenshotPath = screenshotPath;
+        console.log(`  スクリーンショット: ${screenshotPath}`);
+      }
     } else {
       console.log(`[INFO] 空きなし: ${target.facility} / ${target.room} / ${target.date}`);
     }

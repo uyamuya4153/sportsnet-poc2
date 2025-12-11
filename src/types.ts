@@ -69,3 +69,42 @@ export interface CheckResult {
   /** チェック日時 */
   checkedAt: Date;
 }
+
+/**
+ * DynamoDBの監視対象レコード
+ */
+export interface DynamoDBTarget {
+  /** パーティションキー: TARGET#{facility}#{room}#{date} */
+  pk: string;
+  /** 施設名 */
+  facility: string;
+  /** 部屋名 */
+  room: string;
+  /** 監視対象日付（YYYY-MM-DD形式） */
+  date: string;
+  /** 監視対象時間帯 */
+  timeSlots: string[];
+  /** 空き発見済みフラグ */
+  checked: boolean;
+  /** 見つかった空き時間帯 */
+  foundSlots?: string[];
+  /** 空き発見日時（ISO8601） */
+  foundAt?: string;
+  /** 登録日時（ISO8601） */
+  createdAt: string;
+  /** 更新日時（ISO8601） */
+  updatedAt?: string;
+}
+
+/**
+ * Lambda実行結果
+ */
+export interface LambdaResult {
+  statusCode: number;
+  body: {
+    totalTargets: number;
+    checkedTargets: number;
+    foundAvailability: number;
+    results: CheckResult[];
+  };
+}

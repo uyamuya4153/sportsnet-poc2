@@ -1,3 +1,5 @@
+.aws-sam/
 .playwright-mcp/
 dist/
 screenshots/
+node_modules/
