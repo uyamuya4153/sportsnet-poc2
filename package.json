@@ -5,7 +5,7 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
-    "build:lambda": "esbuild src/lambda.ts --bundle --platform=node --target=node22 --outfile=dist/lambda.js --external:@sparticuz/chromium --external:playwright --external:playwright-core",
+    "build:lambda": "esbuild src/lambda.ts --bundle --platform=node --target=node22 --outfile=dist/lambda-package/lambda.js --external:@sparticuz/chromium --external:playwright --external:playwright-core && node scripts/copy-playwright-core.js",
     "start": "tsc && node dist/index.js",
     "dev": "ts-node src/index.ts"
   },

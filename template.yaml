@@ -32,7 +32,7 @@ Resources:
         - x86_64
       MemorySize: 1024
       Timeout: 300
-      CodeUri: dist/
+      CodeUri: dist/lambda-package/
       Environment:
         Variables:
           DYNAMODB_TABLE_NAME: !Ref TargetsTable
