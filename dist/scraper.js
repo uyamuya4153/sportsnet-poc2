@@ -33,6 +33,13 @@ async function navigateToFacility(page, facilityName) {
     // 施設選択後、空き状況テーブルのヘッダー（時間帯）が表示されるのを待つ
     // h3に施設名と日付が表示されるのが空き状況画面の特徴
     await page.waitForSelector('h3:has-text("年")', { timeout: 15000 });
+    // 「施設の空き状況」タブをクリックして、1日の全時間帯を表示
+    // すでに選択されている場合（class="tab on"）はスキップ
+    const facilityTabLink = page.locator('a:has-text("施設の空き状況"):not(.on)');
+    if (await facilityTabLink.count() > 0) {
+        await facilityTabLink.click({ force: true });
+        await page.waitForTimeout(2000);
+    }
     // 空き状況テーブルが完全に読み込まれるのを待つ
     await page.waitForTimeout(1000);
 }
@@ -83,7 +90,8 @@ async function navigateToDate(page, targetDate) {
  */
 function parseAvailabilityStatus(cellText) {
     const text = cellText.trim();
-    if (text === '●' || text === '〇') {
+    // 空き: ●（黒丸）、〇（二重丸/白丸）、○（丸）
+    if (text === '●' || text === '〇' || text === '○') {
         return 'available';
     }
     else if (text === '×') {
@@ -99,22 +107,49 @@ function parseAvailabilityStatus(cellText) {
 }
 /**
  * 時間ヘッダーから時間枠の時間を取得
- * テーブルのヘッダーは「9」「10」「11」のように表示されている
- * 各時間に対して30分刻みで2つのセルがある（9:00-9:30, 9:30-10:00）
+ * 施設によって異なる時間刻みがある:
+ * - 30分刻み: セル数がヘッダー時間数の2倍
+ * - 1時間刻み: セル数がヘッダー時間数と同じ
+ * - 2時間刻み: セル数がヘッダー時間数の半分（colspanで2時間ずつ表示）
  */
-function getTimeFromIndex(headerHours, cellIndex) {
-    // cellIndexは0始まり、各時間に2つのセルがある
-    const hourIndex = Math.floor(cellIndex / 2);
-    const isFirstHalf = cellIndex % 2 === 0;
-    if (hourIndex >= headerHours.length) {
-        return 'unknown';
+function getTimeFromIndex(headerHours, cellIndex, totalCells) {
+    const headerCount = headerHours.length;
+    // セル数とヘッダー数の比率で刻みを判定
+    const ratio = totalCells / headerCount;
+    if (ratio >= 1.5) {
+        // 30分刻み: 各時間に2つのセル
+        const hourIndex = Math.floor(cellIndex / 2);
+        const isFirstHalf = cellIndex % 2 === 0;
+        if (hourIndex >= headerCount) {
+            return ['unknown'];
+        }
+        const hour = parseInt(headerHours[hourIndex], 10);
+        if (isFirstHalf) {
+            return [`${hour}:00`];
+        }
+        else {
+            return [`${hour}:30`];
+        }
     }
-    const hour = parseInt(headerHours[hourIndex], 10);
-    if (isFirstHalf) {
-        return `${hour}:00`;
+    else if (ratio >= 0.8) {
+        // 1時間刻み: 各時間に1つのセル
+        if (cellIndex >= headerCount) {
+            return ['unknown'];
+        }
+        const hour = parseInt(headerHours[cellIndex], 10);
+        return [`${hour}:00`];
     }
     else {
-        return `${hour}:30`;
+        // 2時間刻み（または複数時間刻み）: 各セルが複数時間をカバー
+        // セル数からスパン数を計算
+        const hoursPerCell = Math.round(headerCount / totalCells);
+        const startHourIndex = cellIndex * hoursPerCell;
+        const times = [];
+        for (let i = 0; i < hoursPerCell && (startHourIndex + i) < headerCount; i++) {
+            const hour = parseInt(headerHours[startHourIndex + i], 10);
+            times.push(`${hour}:00`);
+        }
+        return times.length > 0 ? times : ['unknown'];
     }
 }
 /**
@@ -124,45 +159,109 @@ async function parseAvailabilityTable(page) {
     const results = [];
     // ページ安定化のために少し待機
     await page.waitForTimeout(1000);
+    // デバッグ: テーブルの構造を確認
+    const debugInfo = await page.evaluate(() => {
+        const tables = document.querySelectorAll('table');
+        const info = [];
+        tables.forEach((table, idx) => {
+            const rows = table.querySelectorAll('tr');
+            info.push(`Table ${idx}: ${rows.length} rows`);
+            if (rows.length > 0) {
+                const firstRow = rows[0];
+                const cells = firstRow.querySelectorAll('th, td');
+                const cellTexts = Array.from(cells).map(c => c.textContent?.trim()).join(' | ');
+                info.push(`  First row: ${cellTexts}`);
+            }
+        });
+        return info;
+    });
+    console.log('[DEBUG] テーブル構造:');
+    debugInfo.forEach(line => console.log(`  ${line}`));
     // JavaScript評価でDOMから直接データを取得
     const tableData = await page.evaluate(() => {
         const data = [];
         // すべてのテーブルを取得
         const tables = document.querySelectorAll('table');
+        // 最初にヘッダーテーブルを見つけて時間帯を取得
+        let globalHeaderHours = [];
         tables.forEach(table => {
             const rows = table.querySelectorAll('tr');
+            if (rows.length === 0)
+                return;
+            const firstRow = rows[0];
+            const cells = firstRow.querySelectorAll('th, td');
+            cells.forEach(cell => {
+                const text = cell.textContent?.trim() || '';
+                if (text === '施設') {
+                    // このテーブルがヘッダーテーブル
+                    cells.forEach(c => {
+                        const t = c.textContent?.trim() || '';
+                        if (/^\d+$/.test(t)) {
+                            globalHeaderHours.push(t);
+                        }
+                    });
+                }
+            });
+        });
+        // 次に各テーブルからデータを収集
+        tables.forEach(table => {
+            const rows = table.querySelectorAll('tr');
+            if (rows.length === 0)
+                return;
+            // 各行を処理
             rows.forEach(row => {
                 const cells = row.querySelectorAll('td');
                 if (cells.length === 0)
                     return;
                 const roomName = cells[0]?.textContent?.trim() || '';
-                // 「施設」ヘッダー行やヘッダー行をスキップ
-                if (!roomName || roomName === '施設' || roomName === '●' || roomName === '×')
+                // スキップすべき行
+                if (!roomName || roomName === '施設')
+                    return;
+                if (/^\d+月$/.test(roomName))
+                    return;
+                if (/^\d+$/.test(roomName))
+                    return;
+                if (['●', '×', '〇', '-', '空き', '予約済'].includes(roomName))
+                    return;
+                if (roomName.includes('ヶ月') || roomName.includes('週間') || roomName.includes('日前') || roomName.includes('日後'))
+                    return;
+                if (roomName === '本日' || roomName === '前へ' || roomName === '次へ')
+                    return;
+                if (roomName.includes('地域') || roomName.includes('圏域'))
+                    return;
+                if (roomName.includes('日') && roomName.includes('週間'))
                     return;
                 const cellTexts = [];
-                for (let i = 1; i < cells.length; i++) {
-                    cellTexts.push(cells[i]?.textContent?.trim() || '');
+                for (let j = 1; j < cells.length; j++) {
+                    cellTexts.push(cells[j]?.textContent?.trim() || '');
                 }
-                if (cellTexts.length > 0) {
-                    data.push({ roomName, cells: cellTexts });
+                // 有効なデータ行（空き状況のセルが存在する）
+                if (cellTexts.length > 0 && cellTexts.some(c => ['●', '×', '〇', '○', '-'].includes(c))) {
+                    data.push({ roomName, cells: cellTexts, headerHours: globalHeaderHours });
                 }
             });
         });
         return data;
     });
-    // デフォルトの時間帯（サイトの仕様から推測）
-    const headerHours = ['9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20'];
     // 取得したデータを変換
     for (const row of tableData) {
         const timeSlots = [];
+        // ヘッダーから時間帯を取得（なければデフォルト）
+        const headerHours = row.headerHours.length > 0
+            ? row.headerHours
+            : ['9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20'];
+        const totalCells = row.cells.length;
         for (let i = 0; i < row.cells.length; i++) {
             const cellText = row.cells[i];
             const status = parseAvailabilityStatus(cellText);
-            const time = getTimeFromIndex(headerHours, i);
-            timeSlots.push({
-                time,
-                status,
-            });
+            const times = getTimeFromIndex(headerHours, i, totalCells);
+            // 各時間帯に同じステータスを設定（複数時間をカバーするセルの場合）
+            for (const time of times) {
+                timeSlots.push({
+                    time,
+                    status,
+                });
+            }
         }
         if (timeSlots.length > 0) {
             results.push({

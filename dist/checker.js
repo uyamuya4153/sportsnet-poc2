@@ -112,14 +112,27 @@ async function checkTarget(page, target, screenshotDir) {
         // 指定日付に移動
         console.log(`[INFO] 日付を移動中: ${target.date}`);
         await (0, scraper_1.navigateToDate)(page, target.date);
+        // デバッグ用にスクリーンショットを保存
+        await (0, scraper_1.takeScreenshot)(page, './screenshots/debug_page.png');
+        console.log(`[DEBUG] デバッグ用スクリーンショット保存: ./screenshots/debug_page.png`);
         // 空き状況を解析
         console.log(`[INFO] 空き状況を解析中...`);
         const availabilityData = await (0, scraper_1.parseAvailabilityTable)(page);
+        // デバッグ: 取得した全ての部屋名を表示
+        console.log(`[DEBUG] 取得した部屋数: ${availabilityData.length}`);
+        for (const room of availabilityData) {
+            console.log(`[DEBUG]   部屋名: "${room.roomName}" (時間枠数: ${room.timeSlots.length})`);
+        }
         // 対象の部屋を検索
         const roomData = availabilityData.find(room => room.roomName.includes(target.room) || target.room.includes(room.roomName));
         if (!roomData) {
             console.log(`[WARN] 部屋が見つかりません: ${target.room}`);
             return result;
+        }
+        // デバッグ: マッチした部屋の時間枠情報を表示
+        console.log(`[DEBUG] マッチした部屋: "${roomData.roomName}"`);
+        for (const slot of roomData.timeSlots) {
+            console.log(`[DEBUG]   ${slot.time}: ${slot.status}`);
         }
         // 指定時間帯の空きをチェック
         const availableSlots = findAvailableSlots(roomData, target.timeSlots);
